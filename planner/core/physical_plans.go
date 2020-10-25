@@ -1170,6 +1170,8 @@ type PartitionSplitterType int
 const (
 	// PartitionHashSplitterType is the splitter splits by hash.
 	PartitionHashSplitterType = iota
+	// PartitionRangeSplitterType is the splitter splits by range, and keep ordered.
+	PartitionRangeSplitterType
 )
 
 // PhysicalShuffleDataSourceStub represents a data source stub of `PhysicalShuffle`,

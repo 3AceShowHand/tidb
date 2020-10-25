@@ -105,7 +105,17 @@ func optimizeByShuffle4MergeJoin(pp *PhysicalMergeJoin, ctx sessionctx.Context) 
 	if concurrency <= 1 {
 		return nil
 	}
-	return nil
+
+	reqProp := &property.PhysicalProperty{ExpectedCnt: math.MaxFloat64}
+	// todo: replace each field to be valid
+	shuffle := PhysicalShuffle{
+		Concurrency:  concurrency,
+		Tail:         nil,
+		DataSource:   nil,
+		SplitterType: PartitionHashSplitterType,
+		HashByItems:  nil,
+	}.Init(ctx, pp.statsInfo(), pp.SelectBlockOffset(), reqProp)
+	return shuffle
 }
 
 func optimizeByShuffle4Window(pp *PhysicalWindow, ctx sessionctx.Context) *PhysicalShuffle {
