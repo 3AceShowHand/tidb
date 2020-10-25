@@ -241,6 +241,15 @@ func checkPlanAndRun(tk *testkit.TestKit, c *C, plan string, sql string) *testki
 	return tk.MustQuery(sql)
 }
 
+func testParallelRunner(tk *testkit.TestKit, concurrency int, instructions func()) {
+	tk.MustExec(fmt.Sprintf("set @@tidb_merge_join_concurrency = %d", concurrency))
+	defer func() {
+		tk.MustExec(fmt.Sprintf("set @@tidb_merge_join_concurrency = 1"))
+	}()
+
+	instructions()
+}
+
 func (s *testSerialSuite1) TestMergeJoinInDisk(c *C) {
 	defer config.RestoreFunc()()
 	config.UpdateGlobal(func(conf *config.Config) {
@@ -269,16 +278,24 @@ func (s *testSerialSuite1) TestMergeJoinInDisk(c *C) {
 	tk.MustExec("insert into t values(1,1)")
 	tk.MustExec("insert into t1 values(1,3),(4,4)")
 
-	result := checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t1 left outer join t on t.c1 = t1.c1 where t.c1 = 1 or t1.c2 > 20")
-	result.Check(testkit.Rows("1 3 1 1"))
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.MemTracker.BytesConsumed(), Equals, int64(0))
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.MemTracker.MaxConsumed(), Greater, int64(0))
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.DiskTracker.BytesConsumed(), Equals, int64(0))
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.DiskTracker.MaxConsumed(), Greater, int64(0))
-	return
+	instructions := func() {
+		result := checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t1 left outer join t on t.c1 = t1.c1 where t.c1 = 1 or t1.c2 > 20")
+		result.Check(testkit.Rows("1 3 1 1"))
+		c.Assert(tk.Se.GetSessionVars().StmtCtx.MemTracker.BytesConsumed(), Equals, int64(0))
+		c.Assert(tk.Se.GetSessionVars().StmtCtx.MemTracker.MaxConsumed(), Greater, int64(0))
+		c.Assert(tk.Se.GetSessionVars().StmtCtx.DiskTracker.BytesConsumed(), Equals, int64(0))
+		c.Assert(tk.Se.GetSessionVars().StmtCtx.DiskTracker.MaxConsumed(), Greater, int64(0))
+	}
+
+	concurrency := []int{1, 2, 4, 8, 16}
+	for _, item := range concurrency {
+		testParallelRunner(tk, item, instructions)
+	}
 }
 
 func (s *testSuite2) TestMergeJoin(c *C) {
+	concurrency := []int{1, 2, 4, 8, 16}
+
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
 
@@ -289,16 +306,22 @@ func (s *testSuite2) TestMergeJoin(c *C) {
 	tk.MustExec("insert into t values(1,1),(2,2)")
 	tk.MustExec("insert into t1 values(2,3),(4,4)")
 
-	result := checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t left outer join t1 on t.c1 = t1.c1 where t.c1 = 1 or t1.c2 > 20")
-	result.Check(testkit.Rows("1 1 <nil> <nil>"))
-	result = checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t1 right outer join t on t.c1 = t1.c1 where t.c1 = 1 or t1.c2 > 20")
-	result.Check(testkit.Rows("<nil> <nil> 1 1"))
-	result = checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t right outer join t1 on t.c1 = t1.c1 where t.c1 = 1 or t1.c2 > 20")
-	result.Check(testkit.Rows())
-	result = checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t left outer join t1 on t.c1 = t1.c1 where t1.c1 = 3 or false")
-	result.Check(testkit.Rows())
-	result = checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t left outer join t1 on t.c1 = t1.c1 and t.c1 != 1 order by t1.c1")
-	result.Check(testkit.Rows("1 1 <nil> <nil>", "2 2 2 3"))
+	instructions := func() {
+		result := checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t left outer join t1 on t.c1 = t1.c1 where t.c1 = 1 or t1.c2 > 20")
+		result.Check(testkit.Rows("1 1 <nil> <nil>"))
+		result = checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t1 right outer join t on t.c1 = t1.c1 where t.c1 = 1 or t1.c2 > 20")
+		result.Check(testkit.Rows("<nil> <nil> 1 1"))
+		result = checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t right outer join t1 on t.c1 = t1.c1 where t.c1 = 1 or t1.c2 > 20")
+		result.Check(testkit.Rows())
+		result = checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t left outer join t1 on t.c1 = t1.c1 where t1.c1 = 3 or false")
+		result.Check(testkit.Rows())
+		result = checkMergeAndRun(tk, c, "select /*+ TIDB_SMJ(t) */ * from t left outer join t1 on t.c1 = t1.c1 and t.c1 != 1 order by t1.c1")
+		result.Check(testkit.Rows("1 1 <nil> <nil>", "2 2 2 3"))
+	}
+
+	for _, item := range concurrency {
+		testParallelRunner(tk, item, instructions)
+	}
 
 	tk.MustExec("drop table if exists t1")
 	tk.MustExec("drop table if exists t2")
@@ -312,14 +335,20 @@ func (s *testSuite2) TestMergeJoin(c *C) {
 	tk.MustExec("insert into t2 values (1,1), (3,3), (5,5)")
 	tk.MustExec("insert into t3 values (1,1), (5,5), (9,9)")
 
-	result = tk.MustQuery("select /*+ TIDB_SMJ(t1,t2,t3) */ * from t1 left join t2 on t1.c1 = t2.c1 right join t3 on t2.c1 = t3.c1 order by t1.c1, t1.c2, t2.c1, t2.c2, t3.c1, t3.c2;")
-	result.Check(testkit.Rows("<nil> <nil> <nil> <nil> 5 5", "<nil> <nil> <nil> <nil> 9 9", "1 1 1 1 1 1"))
+	instructions = func() {
+		result := tk.MustQuery("select /*+ TIDB_SMJ(t1,t2,t3) */ * from t1 left join t2 on t1.c1 = t2.c1 right join t3 on t2.c1 = t3.c1 order by t1.c1, t1.c2, t2.c1, t2.c2, t3.c1, t3.c2;")
+		result.Check(testkit.Rows("<nil> <nil> <nil> <nil> 5 5", "<nil> <nil> <nil> <nil> 9 9", "1 1 1 1 1 1"))
 
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("create table t1 (c1 int)")
-	tk.MustExec("insert into t1 values (1), (1), (1)")
-	result = tk.MustQuery("select/*+ TIDB_SMJ(t) */  * from t1 a join t1 b on a.c1 = b.c1;")
-	result.Check(testkit.Rows("1 1", "1 1", "1 1", "1 1", "1 1", "1 1", "1 1", "1 1", "1 1"))
+		tk.MustExec("drop table if exists t1")
+		tk.MustExec("create table t1 (c1 int)")
+		tk.MustExec("insert into t1 values (1), (1), (1)")
+		result = tk.MustQuery("select/*+ TIDB_SMJ(t) */  * from t1 a join t1 b on a.c1 = b.c1;")
+		result.Check(testkit.Rows("1 1", "1 1", "1 1", "1 1", "1 1", "1 1", "1 1", "1 1", "1 1"))
+	}
+
+	for _, item := range concurrency {
+		testParallelRunner(tk, item, instructions)
+	}
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("drop table if exists t1")
@@ -327,22 +356,29 @@ func (s *testSuite2) TestMergeJoin(c *C) {
 	tk.MustExec("create table t1(c1 int)")
 	tk.MustExec("insert into t values (1),(2),(3),(4),(5),(6),(7)")
 	tk.MustExec("insert into t1 values (1),(2),(3),(4),(5),(6),(7)")
-	result = tk.MustQuery("select /*+ TIDB_SMJ(a,b) */ a.c1 from t a , t1 b where a.c1 = b.c1 order by a.c1;")
-	result.Check(testkit.Rows("1", "2", "3", "4", "5", "6", "7"))
-	result = tk.MustQuery("select /*+ TIDB_SMJ(a, b) */ a.c1 from t a , (select * from t1 limit 3) b where a.c1 = b.c1 order by b.c1;")
-	result.Check(testkit.Rows("1", "2", "3"))
-	// Test LogicalSelection under LogicalJoin.
-	result = tk.MustQuery("select /*+ TIDB_SMJ(a, b) */ a.c1 from t a , (select * from t1 limit 3) b where a.c1 = b.c1 and b.c1 is not null order by b.c1;")
-	result.Check(testkit.Rows("1", "2", "3"))
-	tk.MustExec("begin;")
-	// Test LogicalLock under LogicalJoin.
-	result = tk.MustQuery("select /*+ TIDB_SMJ(a, b) */ a.c1 from t a , (select * from t1 for update) b where a.c1 = b.c1 order by a.c1;")
-	result.Check(testkit.Rows("1", "2", "3", "4", "5", "6", "7"))
-	// Test LogicalUnionScan under LogicalJoin.
-	tk.MustExec("insert into t1 values(8);")
-	result = tk.MustQuery("select /*+ TIDB_SMJ(a, b) */ a.c1 from t a , t1 b where a.c1 = b.c1;")
-	result.Check(testkit.Rows("1", "2", "3", "4", "5", "6", "7"))
-	tk.MustExec("rollback;")
+
+	instructions = func() {
+		result := tk.MustQuery("select /*+ TIDB_SMJ(a,b) */ a.c1 from t a , t1 b where a.c1 = b.c1 order by a.c1;")
+		result.Check(testkit.Rows("1", "2", "3", "4", "5", "6", "7"))
+		result = tk.MustQuery("select /*+ TIDB_SMJ(a, b) */ a.c1 from t a , (select * from t1 limit 3) b where a.c1 = b.c1 order by b.c1;")
+		result.Check(testkit.Rows("1", "2", "3"))
+		// Test LogicalSelection under LogicalJoin.
+		result = tk.MustQuery("select /*+ TIDB_SMJ(a, b) */ a.c1 from t a , (select * from t1 limit 3) b where a.c1 = b.c1 and b.c1 is not null order by b.c1;")
+		result.Check(testkit.Rows("1", "2", "3"))
+		tk.MustExec("begin;")
+		// Test LogicalLock under LogicalJoin.
+		result = tk.MustQuery("select /*+ TIDB_SMJ(a, b) */ a.c1 from t a , (select * from t1 for update) b where a.c1 = b.c1 order by a.c1;")
+		result.Check(testkit.Rows("1", "2", "3", "4", "5", "6", "7"))
+		// Test LogicalUnionScan under LogicalJoin.
+		tk.MustExec("insert into t1 values(8);")
+		result = tk.MustQuery("select /*+ TIDB_SMJ(a, b) */ a.c1 from t a , t1 b where a.c1 = b.c1;")
+		result.Check(testkit.Rows("1", "2", "3", "4", "5", "6", "7"))
+		tk.MustExec("rollback;")
+	}
+
+	for _, item := range concurrency {
+		testParallelRunner(tk, item, instructions)
+	}
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("drop table if exists t1")
@@ -350,13 +386,23 @@ func (s *testSuite2) TestMergeJoin(c *C) {
 	tk.MustExec("create table t1(c1 int unsigned)")
 	tk.MustExec("insert into t values (1)")
 	tk.MustExec("insert into t1 values (1)")
-	result = tk.MustQuery("select /*+ TIDB_SMJ(t,t1) */ t.c1 from t , t1 where t.c1 = t1.c1")
-	result.Check(testkit.Rows("1"))
+
+	for _, item := range concurrency {
+		testParallelRunner(tk, item, func() {
+			result := tk.MustQuery("select /*+ TIDB_SMJ(t,t1) */ t.c1 from t , t1 where t.c1 = t1.c1")
+			result.Check(testkit.Rows("1"))
+		})
+	}
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t(a int, b int, index a(a), index b(b))")
 	tk.MustExec("insert into t values(1, 2)")
-	tk.MustQuery("select /*+ TIDB_SMJ(t, t1) */ t.a, t1.b from t right join t t1 on t.a = t1.b order by t.a").Check(testkit.Rows("<nil> 2"))
+
+	for _, item := range concurrency {
+		testParallelRunner(tk, item, func() {
+			tk.MustQuery("select /*+ TIDB_SMJ(t, t1) */ t.a, t1.b from t right join t t1 on t.a = t1.b order by t.a").Check(testkit.Rows("<nil> 2"))
+		})
+	}
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("drop table if exists s")
@@ -364,7 +410,12 @@ func (s *testSuite2) TestMergeJoin(c *C) {
 	tk.MustExec("insert into t value(1,1),(1,2),(1,3),(1,4)")
 	tk.MustExec("create table s(a int, primary key(a))")
 	tk.MustExec("insert into s value(1)")
-	tk.MustQuery("select /*+ TIDB_SMJ(t, s) */ count(*) from t join s on t.a = s.a").Check(testkit.Rows("4"))
+
+	for _, item := range concurrency {
+		testParallelRunner(tk, item, func() {
+			tk.MustQuery("select /*+ TIDB_SMJ(t, s) */ count(*) from t join s on t.a = s.a").Check(testkit.Rows("4"))
+		})
+	}
 
 	// Test TIDB_SMJ for cartesian product.
 	tk.MustExec("drop table if exists t")
@@ -410,15 +461,22 @@ func (s *testSuite2) TestMergeJoin(c *C) {
 	tk.MustExec("create table t1 (a int, key(a))")
 	tk.MustExec("insert into t values (1), (2), (3)")
 	tk.MustExec("insert into t1 values (1), (2), (3)")
-	tk.MustQuery("select /*+ TIDB_SMJ(t1, t2) */ t.a from t, t1 where t.a = t1.a order by t1.a desc").Check(testkit.Rows(
-		"3", "2", "1"))
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int, b int, key(a), key(b))")
-	tk.MustExec("insert into t values (1,1),(1,2),(1,3),(2,1),(2,2),(3,1),(3,2),(3,3)")
-	tk.MustQuery("select /*+ TIDB_SMJ(t1, t2) */ t1.a from t t1, t t2 where t1.a = t2.b order by t1.a desc").Check(testkit.Rows(
-		"3", "3", "3", "3", "3", "3",
-		"2", "2", "2", "2", "2", "2",
-		"1", "1", "1", "1", "1", "1", "1", "1", "1"))
+
+	instructions = func() {
+		tk.MustQuery("select /*+ TIDB_SMJ(t1, t2) */ t.a from t, t1 where t.a = t1.a order by t1.a desc").Check(testkit.Rows(
+			"3", "2", "1"))
+		tk.MustExec("drop table if exists t")
+		tk.MustExec("create table t (a int, b int, key(a), key(b))")
+		tk.MustExec("insert into t values (1,1),(1,2),(1,3),(2,1),(2,2),(3,1),(3,2),(3,3)")
+		tk.MustQuery("select /*+ TIDB_SMJ(t1, t2) */ t1.a from t t1, t t2 where t1.a = t2.b order by t1.a desc").Check(testkit.Rows(
+			"3", "3", "3", "3", "3", "3",
+			"2", "2", "2", "2", "2", "2",
+			"1", "1", "1", "1", "1", "1", "1", "1", "1"))
+	}
+
+	for _, item := range concurrency {
+		testParallelRunner(tk, item, instructions)
+	}
 
 	tk.MustExec("drop table if exists s")
 	tk.MustExec("create table s (a int)")

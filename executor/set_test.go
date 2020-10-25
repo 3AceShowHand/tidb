@@ -968,6 +968,7 @@ func (s *testSuite5) TestSetConcurrency(c *C) {
 	tk.MustQuery("select @@tidb_hashagg_partial_concurrency;").Check(testkit.Rows(strconv.Itoa(variable.ConcurrencyUnset)))
 	tk.MustQuery("select @@tidb_hashagg_final_concurrency;").Check(testkit.Rows(strconv.Itoa(variable.ConcurrencyUnset)))
 	tk.MustQuery("select @@tidb_window_concurrency;").Check(testkit.Rows(strconv.Itoa(variable.ConcurrencyUnset)))
+	tk.MustQuery("select @@tidb_merge_join_concurrency").Check(testkit.Rows(strconv.Itoa(variable.ConcurrencyUnset)))
 	tk.MustQuery("select @@tidb_projection_concurrency;").Check(testkit.Rows(strconv.Itoa(variable.ConcurrencyUnset)))
 	tk.MustQuery("select @@tidb_distsql_scan_concurrency;").Check(testkit.Rows(strconv.Itoa(variable.DefDistSQLScanConcurrency)))
 
@@ -1017,6 +1018,9 @@ func (s *testSuite5) TestSetConcurrency(c *C) {
 	checkSet(variable.TiDBWindowConcurrency)
 	c.Assert(vars.WindowConcurrency(), Equals, 1)
 
+	checkSet(variable.TiDBMergeJoinConcurrency)
+	c.Assert(vars.MergeJoinConcurrency(), Equals, 1)
+
 	tk.MustExec(fmt.Sprintf("set @@%s=1;", variable.TiDBDistSQLScanConcurrency))
 	tk.MustQuery(fmt.Sprintf("select @@%s;", variable.TiDBDistSQLScanConcurrency)).Check(testkit.Rows("1"))
 	c.Assert(vars.DistSQLScanConcurrency(), Equals, 1)
@@ -1033,6 +1037,7 @@ func (s *testSuite5) TestSetConcurrency(c *C) {
 	tk.MustExec("set @@tidb_hashagg_partial_concurrency=-1;")
 	tk.MustExec("set @@tidb_hashagg_final_concurrency=-1;")
 	tk.MustExec("set @@tidb_window_concurrency=-1;")
+	tk.MustExec("set @@tidb_merge_join_concurrency=-1;")
 	tk.MustExec("set @@tidb_projection_concurrency=-1;")
 
 	c.Assert(vars.IndexLookupConcurrency(), Equals, variable.DefExecutorConcurrency)
@@ -1041,6 +1046,7 @@ func (s *testSuite5) TestSetConcurrency(c *C) {
 	c.Assert(vars.HashAggPartialConcurrency(), Equals, variable.DefExecutorConcurrency)
 	c.Assert(vars.HashAggFinalConcurrency(), Equals, variable.DefExecutorConcurrency)
 	c.Assert(vars.WindowConcurrency(), Equals, variable.DefExecutorConcurrency)
+	c.Assert(vars.MergeJoinConcurrency(), Equals, variable.DefExecutorConcurrency)
 	c.Assert(vars.ProjectionConcurrency(), Equals, variable.DefExecutorConcurrency)
 
 	_, err := tk.Exec("set @@tidb_executor_concurrency=-1;")

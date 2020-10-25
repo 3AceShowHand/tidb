@@ -654,6 +654,7 @@ func main() {
 		"set @@tidb_hashagg_final_concurrency=4",
 		"set @@tidb_hashagg_partial_concurrency=4",
 		"set @@tidb_window_concurrency=4",
+		"set @@tidb_merge_join_concurrency=4",
 		"set @@tidb_projection_concurrency=4",
 		"set @@tidb_distsql_scan_concurrency=15",
 		"set @@tidb_enable_clustered_index=0;",
