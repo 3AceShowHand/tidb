@@ -92,8 +92,20 @@ func optimizeByShuffle(pp PhysicalPlan, tsk task, ctx sessionctx.Context) task {
 		if shuffle := optimizeByShuffle4Window(p, ctx); shuffle != nil {
 			return shuffle.attach2Task(tsk)
 		}
+	case *PhysicalMergeJoin:
+		if shuffle := optimizeByShuffle4MergeJoin(p, ctx); shuffle != nil {
+			return shuffle.attach2Task(tsk)
+		}
 	}
 	return tsk
+}
+
+func optimizeByShuffle4MergeJoin(pp *PhysicalMergeJoin, ctx sessionctx.Context) *PhysicalShuffle {
+	concurrency := ctx.GetSessionVars().MergeJoinConcurrency()
+	if concurrency <= 1 {
+		return nil
+	}
+	return nil
 }
 
 func optimizeByShuffle4Window(pp *PhysicalWindow, ctx sessionctx.Context) *PhysicalShuffle {

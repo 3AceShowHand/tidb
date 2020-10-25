@@ -74,6 +74,7 @@ func (s *testVarsutilSuite) TestNewSessionVars(c *C) {
 	c.Assert(vars.hashAggPartialConcurrency, Equals, ConcurrencyUnset)
 	c.Assert(vars.hashAggFinalConcurrency, Equals, ConcurrencyUnset)
 	c.Assert(vars.windowConcurrency, Equals, ConcurrencyUnset)
+	c.Assert(vars.mergeJoinConcurrency, Equals, ConcurrencyUnset)
 	c.Assert(vars.distSQLScanConcurrency, Equals, DefDistSQLScanConcurrency)
 	c.Assert(vars.ProjectionConcurrency(), Equals, DefExecutorConcurrency)
 	c.Assert(vars.HashAggPartialConcurrency(), Equals, DefExecutorConcurrency)
@@ -650,6 +651,14 @@ func (s *testVarsutilSuite) TestConcurrencyVariables(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(vars.windowConcurrency, Equals, wdConcurrency)
 	c.Assert(vars.WindowConcurrency(), Equals, wdConcurrency)
+
+	smjConcurrency := 2
+	c.Assert(vars.mergeJoinConcurrency, Equals, ConcurrencyUnset)
+	c.Assert(vars.MergeJoinConcurrency(), Equals, DefExecutorConcurrency)
+	err = SetSessionSystemVar(vars, TiDBMergeJoinConcurrency, types.NewIntDatum(int64(smjConcurrency)))
+	c.Assert(err, IsNil)
+	c.Assert(vars.mergeJoinConcurrency, Equals, smjConcurrency)
+	c.Assert(vars.MergeJoinConcurrency(), Equals, smjConcurrency)
 
 	c.Assert(vars.indexLookupConcurrency, Equals, ConcurrencyUnset)
 	c.Assert(vars.IndexLookupConcurrency(), Equals, DefExecutorConcurrency)
