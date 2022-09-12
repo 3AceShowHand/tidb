@@ -107,7 +107,7 @@ func getPlanFromGeneralPlanCache(ctx context.Context, sctx sessionctx.Context, s
 func Optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is infoschema.InfoSchema) (core.Plan, types.NameSlice, error) {
 	sessVars := sctx.GetSessionVars()
 
-	if !sctx.GetSessionVars().InRestrictedSQL && variable.RestrictedReadOnly.Load() || variable.VarTiDBSuperReadOnly.Load() {
+	if !sessVars.InRestrictedSQL && variable.RestrictedReadOnly.Load() || variable.VarTiDBSuperReadOnly.Load() {
 		allowed, err := allowInReadOnlyMode(sctx, node)
 		if err != nil {
 			return nil, nil, err
@@ -177,7 +177,7 @@ func Optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is in
 	}
 
 	// try to get Plan from the General Plan Cache
-	if sctx.GetSessionVars().EnableGeneralPlanCache &&
+	if sessVars.EnableGeneralPlanCache &&
 		isStmtNode &&
 		!useBinding { // TODO: support binding
 		cachedPlan, names, ok, err := getPlanFromGeneralPlanCache(ctx, sctx, stmtNode, is)
