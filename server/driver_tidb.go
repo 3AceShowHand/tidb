@@ -223,11 +223,14 @@ func (tc *TiDBContext) WarningCount() uint16 {
 
 // ExecuteStmt implements QueryCtx interface.
 func (tc *TiDBContext) ExecuteStmt(ctx context.Context, stmt ast.StmtNode) (ResultSet, error) {
-	var rs sqlexec.RecordSet
-	var err error
-	if s, ok := stmt.(*ast.NonTransactionalDeleteStmt); ok {
+	var (
+		rs  sqlexec.RecordSet
+		err error
+	)
+	switch s := stmt.(type) {
+	case *ast.NonTransactionalDeleteStmt:
 		rs, err = session.HandleNonTransactionalDelete(ctx, s, tc.Session)
-	} else {
+	default:
 		rs, err = tc.Session.ExecuteStmt(ctx, stmt)
 	}
 	if err != nil {
