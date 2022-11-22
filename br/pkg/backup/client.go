@@ -1080,29 +1080,25 @@ func SendBackup(
 		ctx = opentracing.ContextWithSpan(ctx, span1)
 	}
 
-	var errReset error
-	var errBackup error
-
 	for retry := 0; retry < backupRetryTimes; retry++ {
 		logutil.CL(ctx).Info("try backup",
 			zap.Int("retry time", retry),
 		)
-		errBackup = doSendBackup(ctx, client, req, respFn)
-		if errBackup != nil {
-			if isRetryableError(errBackup) {
-				time.Sleep(3 * time.Second)
-				client, errReset = resetFn()
-				if errReset != nil {
-					return errors.Annotatef(errReset, "failed to reset backup connection on store:%d "+
-						"please check the tikv status", storeID)
-				}
-				continue
-			}
-			logutil.CL(ctx).Error("fail to backup", zap.Uint64("StoreID", storeID), zap.Int("retry", retry))
-			return berrors.ErrFailedToConnect.Wrap(errBackup).GenWithStack("failed to create backup stream to store %d", storeID)
+		err := doSendBackup(ctx, client, req, respFn)
+		if err == nil {
+			return nil
 		}
-		// finish backup
-		break
+
+		if !isRetryableError(err) {
+			logutil.CL(ctx).Error("fail to backup", zap.Uint64("StoreID", storeID), zap.Int("retry", retry))
+			return berrors.ErrFailedToConnect.Wrap(err).GenWithStack("failed to create backup stream to store %d", storeID)
+		}
+		time.Sleep(3 * time.Second)
+		client, err = resetFn()
+		if err != nil {
+			return errors.Annotatef(err, "failed to reset backup connection on store:%d "+
+				"please check the tikv status", storeID)
+		}
 	}
 	return nil
 }
