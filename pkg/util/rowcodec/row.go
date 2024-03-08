@@ -16,7 +16,10 @@ package rowcodec
 
 import (
 	"encoding/binary"
+	"hash/crc32"
 	"strconv"
+
+	"github.com/pingcap/tidb/pkg/kv"
 )
 
 const (
@@ -195,13 +198,15 @@ func (r *row) toBytes(buf []byte) []byte {
 		buf = append(buf, u16SliceToBytes(r.offsets)...)
 	}
 	buf = append(buf, r.data...)
-	if r.hasChecksum() {
-		buf = append(buf, r.checksumHeader)
-		buf = binary.LittleEndian.AppendUint32(buf, r.checksum1)
-		if r.hasExtraChecksum() {
-			buf = binary.LittleEndian.AppendUint32(buf, r.checksum2)
-		}
-	}
+
+	return buf
+}
+
+func (r *row) appendRawChecksum(buf []byte, key kv.Key) []byte {
+	// todo: make sure the valueBytes does not contain keyBytes after returned to the caller.
+	checksum := crc32.Checksum(append(buf, key...), crc32.IEEETable)
+	buf = append(buf, r.checksumHeader)
+	buf = binary.LittleEndian.AppendUint32(buf, checksum)
 	return buf
 }
 

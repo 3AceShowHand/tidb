@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/codec"
@@ -39,13 +40,20 @@ type Encoder struct {
 // `buf` is not truncated before encoding.
 // This function may return both a valid encoded bytes and an error (actually `"pingcap/errors".ErrorGroup`). If the caller
 // expects to handle these errors according to `SQL_MODE` or other configuration, please refer to `pkg/errctx`.
-func (encoder *Encoder) Encode(loc *time.Location, colIDs []int64, values []types.Datum, buf []byte, checksums ...uint32) ([]byte, error) {
+func (encoder *Encoder) Encode(loc *time.Location, colIDs []int64, values []types.Datum, buf []byte, key kv.Key, checksums ...uint32) ([]byte, error) {
 	encoder.reset()
 	encoder.appendColVals(colIDs, values)
 	numCols, notNullIdx := encoder.reformatCols()
 	err := encoder.encodeRowCols(loc, numCols, notNullIdx)
-	encoder.setChecksums(checksums...)
-	return encoder.row.toBytes(buf), err
+	if key != nil {
+		encoder.flags |= rowFlagChecksum
+		encoder.checksumHeader = 1
+	}
+	valueBytes := encoder.toBytes(buf)
+	if encoder.hasChecksum() {
+		valueBytes = encoder.appendRawChecksum(valueBytes, key)
+	}
+	return valueBytes, err
 }
 
 func (encoder *Encoder) reset() {
