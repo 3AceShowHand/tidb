@@ -16,10 +16,7 @@ package rowcodec
 
 import (
 	"encoding/binary"
-	"hash/crc32"
 	"strconv"
-
-	"github.com/pingcap/tidb/pkg/kv"
 )
 
 const (
@@ -198,15 +195,6 @@ func (r *row) toBytes(buf []byte) []byte {
 	}
 	buf = append(buf, r.data...)
 
-	return buf
-}
-
-func (r *row) appendRawChecksum(buf []byte, key kv.Key) []byte {
-	// set the checksumHeader to 1 to specify using the raw bytes checksum.
-	r.checksumHeader = 1
-	buf = append(buf, r.checksumHeader)
-	checksum := crc32.Checksum(append(buf, key...), crc32.IEEETable)
-	buf = binary.LittleEndian.AppendUint32(buf, checksum)
 	return buf
 }
 
