@@ -202,8 +202,10 @@ func (r *row) toBytes(buf []byte) []byte {
 }
 
 func (r *row) appendRawChecksum(buf []byte, key kv.Key) []byte {
-	checksum := crc32.Checksum(append(buf, key...), crc32.IEEETable)
+	// set the checksumHeader to 1 to specify using the raw bytes checksum.
+	r.checksumHeader = 1
 	buf = append(buf, r.checksumHeader)
+	checksum := crc32.Checksum(append(buf, key...), crc32.IEEETable)
 	buf = binary.LittleEndian.AppendUint32(buf, checksum)
 	return buf
 }

@@ -162,7 +162,7 @@ func TestDecodeRowWithHandle(t *testing.T) {
 
 			// test encode input.
 			var encoder rowcodec.Encoder
-			newRow, err := encoder.Encode(time.UTC, colIDs, dts, nil)
+			newRow, err := encoder.Encode(time.UTC, colIDs, dts, nil, nil)
 			require.NoError(t, err)
 
 			// decode to datum map.
@@ -253,7 +253,7 @@ func TestDecodeDecimalFspNotMatch(t *testing.T) {
 	ft := types.NewFieldType(mysql.TypeNewDecimal)
 	ft.SetDecimal(4)
 	fts := []*types.FieldType{ft}
-	newRow, err := encoder.Encode(time.UTC, colIDs, dts, nil)
+	newRow, err := encoder.Encode(time.UTC, colIDs, dts, nil, nil)
 	require.NoError(t, err)
 
 	// decode to chunk.
@@ -840,7 +840,7 @@ func Test65535Bug(t *testing.T) {
 	tps[0] = types.NewFieldType(mysql.TypeString)
 	text65535 := strings.Repeat("a", 65535)
 	encode := rowcodec.Encoder{}
-	bd, err := encode.Encode(time.UTC, colIds, []types.Datum{types.NewStringDatum(text65535)}, nil)
+	bd, err := encode.Encode(time.UTC, colIds, []types.Datum{types.NewStringDatum(text65535)}, nil, nil)
 	require.NoError(t, err)
 
 	cols := make([]rowcodec.ColInfo, 1)
@@ -1207,7 +1207,7 @@ func TestEncodeDecodeRowWithChecksum(t *testing.T) {
 		{"ThreeChecksum", []uint32{1, 2, 3}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			raw, err := enc.Encode(time.UTC, nil, nil, nil, tt.checksums...)
+			raw, err := enc.Encode(time.UTC, nil, nil, nil, nil, tt.checksums...)
 			require.NoError(t, err)
 			dec := rowcodec.NewDatumMapDecoder([]rowcodec.ColInfo{}, time.UTC)
 			_, err = dec.DecodeToDatumMap(raw, nil)

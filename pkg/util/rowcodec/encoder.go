@@ -40,14 +40,14 @@ type Encoder struct {
 // `buf` is not truncated before encoding.
 // This function may return both a valid encoded bytes and an error (actually `"pingcap/errors".ErrorGroup`). If the caller
 // expects to handle these errors according to `SQL_MODE` or other configuration, please refer to `pkg/errctx`.
-func (encoder *Encoder) Encode(loc *time.Location, colIDs []int64, values []types.Datum, buf []byte, key kv.Key) ([]byte, error) {
+// the caller should make sure the key is not nil if you require checksum.
+func (encoder *Encoder) Encode(loc *time.Location, colIDs []int64, values []types.Datum, buf []byte, key kv.Key, checksum ...uint32) ([]byte, error) {
 	encoder.reset()
 	encoder.appendColVals(colIDs, values)
 	numCols, notNullIdx := encoder.reformatCols()
 	err := encoder.encodeRowCols(loc, numCols, notNullIdx)
 	if key != nil {
 		encoder.flags |= rowFlagChecksum
-		encoder.checksumHeader = 1
 	}
 	valueBytes := encoder.toBytes(buf)
 	if encoder.hasChecksum() {
