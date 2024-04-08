@@ -16,7 +16,12 @@ package rowcodec
 
 import (
 	"encoding/binary"
+	"hash/crc32"
 	"strconv"
+	"time"
+
+	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/types"
 )
 
 const (
@@ -112,8 +117,10 @@ func (r *row) getChecksumInfo() string {
 	return s
 }
 
-func (r *row) getData(i int) []byte {
-	var start, end uint32
+func (r *row) getOffsets(i int) (uint32, uint32) {
+	var (
+		start, end uint32
+	)
 	if r.large() {
 		if i > 0 {
 			start = r.offsets32[i-1]
@@ -125,6 +132,11 @@ func (r *row) getData(i int) []byte {
 		}
 		end = uint32(r.offsets[i])
 	}
+	return start, end
+}
+
+func (r *row) getData(i int) []byte {
+	start, end := r.getOffsets(i)
 	return r.data[start:end]
 }
 
@@ -311,4 +323,28 @@ func (r *row) initOffsets32() {
 	} else {
 		r.offsets32 = make([]uint32, r.numNotNullCols)
 	}
+}
+
+func (r *row) CalculateRawChecksum(
+	loc *time.Location, colIDs []int64, values []*types.Datum, key kv.Key, buf []byte,
+) (uint32, error) {
+	if !r.hasChecksum() {
+		panic("checksum is not enabled")
+	}
+	for idx, colID := range colIDs {
+		bytes, err := encodeValueDatum(loc, values[idx], nil)
+		if err != nil {
+			return 0, err
+		}
+		index, isNil, notFound := r.findColID(colID)
+		if !notFound && !isNil {
+			start, end := r.getOffsets(index)
+			copy(r.data[start:end], bytes)
+		}
+	}
+	buf = r.toBytes(buf)
+	r.checksumHeader = 1
+	buf = append(buf, r.checksumHeader)
+	rawChecksum := crc32.Checksum(append(buf, key...), crc32.IEEETable)
+	return rawChecksum, nil
 }
