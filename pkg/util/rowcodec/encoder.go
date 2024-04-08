@@ -62,28 +62,6 @@ func (encoder *Encoder) Encode(loc *time.Location, colIDs []int64, values []type
 	return valueBytes, err
 }
 
-// CalculateRawChecksum calcuates the raw checksum based on the given elements.
-// this is mainly used by the TiCDC to implement E2E checksum functionality.
-//func (encoder *Encoder) CalculateRawChecksum(loc *time.Location, colIDs []int64, values []types.Datum, buf []byte, key kv.Key) (uint32, error) {
-//	encoder.reset()
-//	encoder.appendColVals(colIDs, values)
-//	numCols, notNullIdx := encoder.reformatCols()
-//	err := encoder.encodeRowCols(loc, numCols, notNullIdx)
-//	if key != nil {
-//		encoder.flags |= rowFlagChecksum
-//	}
-//	var rawChecksum uint32
-//	valueBytes := encoder.toBytes(buf)
-//	if encoder.hasChecksum() {
-//		// set the checksumHeader to 1 to specify using the raw checksum.
-//		encoder.checksumHeader = 1
-//		valueBytes = append(valueBytes, encoder.checksumHeader)
-//		rawChecksum = crc32.Checksum(append(valueBytes, key...), crc32.IEEETable)
-//		valueBytes = binary.LittleEndian.AppendUint32(valueBytes, rawChecksum)
-//	}
-//	return rawChecksum, err
-//}
-
 func (encoder *Encoder) reset() {
 	encoder.flags = 0
 	encoder.numNotNullCols = 0

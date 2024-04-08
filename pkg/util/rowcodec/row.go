@@ -325,21 +325,23 @@ func (r *row) initOffsets32() {
 	}
 }
 
+// CalculateRawChecksum calculates the bytes-level checksum by using the given elements.
+// this is mainly used by the TiCDC to implement E2E checksum functionality.
 func (r *row) CalculateRawChecksum(
 	loc *time.Location, colIDs []int64, values []*types.Datum, key kv.Key, buf []byte,
 ) (uint32, error) {
-	if !r.hasChecksum() {
-		panic("checksum is not enabled")
-	}
+	r.flags |= rowFlagChecksum
 	for idx, colID := range colIDs {
-		bytes, err := encodeValueDatum(loc, values[idx], nil)
+		data, err := encodeValueDatum(loc, values[idx], nil)
 		if err != nil {
 			return 0, err
 		}
 		index, isNil, notFound := r.findColID(colID)
+		// some datum may not be found, since it's not encoded into the raw bytes,
+		// such as handle key columns, or null columns.
 		if !notFound && !isNil {
 			start, end := r.getOffsets(index)
-			copy(r.data[start:end], bytes)
+			copy(r.data[start:end], data)
 		}
 	}
 	buf = r.toBytes(buf)
