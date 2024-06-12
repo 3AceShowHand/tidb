@@ -2909,7 +2909,7 @@ id	estRows	task	access object	operator info
 Batch_Point_Get_1	2.00	root	table:t, partition:p1,P2	handle:[1 2], keep order:false, desc:false
 explain select * from t where a IN (1, 2, 1);
 id	estRows	task	access object	operator info
-Batch_Point_Get_1	3.00	root	table:t, partition:p1,P2	handle:[1 2 1], keep order:false, desc:false
+Batch_Point_Get_1	3.00	root	table:t, partition:p1,P2	handle:[1 2], keep order:false, desc:false
 create database Issue32007;
 USE Issue32007;
 create table t1 (a int, b tinyint, primary key (a)) partition by range (a) (partition p0 values less than (5),partition p1 values less than (20),partition p2 values less than (30),partition p3 values less than (40),partition p4 values less than MAXVALUE);
@@ -3253,6 +3253,6 @@ TableReader_7	0.00	root	partition:dual	data:Selection_6
   └─TableFullScan_5	10000.00	cop[tikv]	table:t	keep order:false, stats:pseudo
 desc select * from t where a in (-6895222, 3125507, 9223372036854775809);
 id	estRows	task	access object	operator info
-TableReader_7	8000.00	root	partition:p0	data:Selection_6
-└─Selection_6	8000.00	cop[tikv]		in(planner__core__partition_pruner.t.a, -6895222, 3125507, 9223372036854775809)
+TableReader_7	20.00	root	partition:p0	data:Selection_6
+└─Selection_6	20.00	cop[tikv]		in(planner__core__partition_pruner.t.a, -6895222, 3125507, 9223372036854775809)
   └─TableFullScan_5	10000.00	cop[tikv]	table:t	keep order:false, stats:pseudo

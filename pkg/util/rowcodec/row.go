@@ -16,12 +16,15 @@ package rowcodec
 
 import (
 	"encoding/binary"
+<<<<<<< HEAD
 	"hash/crc32"
 	"strconv"
 	"time"
 
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/types"
+=======
+>>>>>>> master
 )
 
 const (
@@ -106,6 +109,7 @@ func (r *row) setChecksums(checksums ...uint32) {
 	}
 }
 
+<<<<<<< HEAD
 func (r *row) getChecksumInfo() string {
 	var s string
 	if r.hasChecksum() {
@@ -121,6 +125,10 @@ func (r *row) getOffsets(i int) (uint32, uint32) {
 	var (
 		start, end uint32
 	)
+=======
+func (r *row) getData(i int) []byte {
+	var start, end uint32
+>>>>>>> master
 	if r.large() {
 		if i > 0 {
 			start = r.offsets32[i-1]

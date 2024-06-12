@@ -142,10 +142,10 @@ type SysVar struct {
 	SetSession func(*SessionVars, string) error
 	// SetGlobal is called after validation
 	SetGlobal func(context.Context, *SessionVars, string) error
-	// IsHintUpdatableVerfied indicate whether we've confirmed that SET_VAR() hint is worked for this hint.
-	IsHintUpdatableVerfied bool
+	// IsHintUpdatableVerified indicate whether we've confirmed that SET_VAR() hint is worked for this hint.
+	IsHintUpdatableVerified bool
 	// Deprecated: Hidden previously meant that the variable still responds to SET but doesn't show up in SHOW VARIABLES
-	// However, this feature is no longer used. All variables are visble.
+	// However, this feature is no longer used. All variables are visible.
 	Hidden bool
 	// Aliases is a list of sysvars that should also be updated when this sysvar is updated.
 	// Updating aliases calls the SET function of the aliases, but does not update their aliases (preventing SET recursion)

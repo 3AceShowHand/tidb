@@ -1353,6 +1353,61 @@ func TestTiDBEnableRowLevelChecksum(t *testing.T) {
 	require.Equal(t, Off, val)
 }
 
+func TestTiDBAutoAnalyzeRatio(t *testing.T) {
+	ctx := context.Background()
+	vars := NewSessionVars(nil)
+	mock := NewMockGlobalAccessor4Tests()
+	mock.SessionVars = vars
+	vars.GlobalVarsAccessor = mock
+
+	// default to 0.5
+	val, err := mock.GetGlobalSysVar(TiDBAutoAnalyzeRatio)
+	require.NoError(t, err)
+	require.Equal(t, "0.5", val)
+
+	// set to 0.1
+	err = mock.SetGlobalSysVar(ctx, TiDBAutoAnalyzeRatio, "0.1")
+	require.NoError(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBAutoAnalyzeRatio)
+	require.NoError(t, err)
+	require.Equal(t, "0.1", val)
+
+	// set to 1.1
+	err = mock.SetGlobalSysVar(ctx, TiDBAutoAnalyzeRatio, "1.1")
+	require.NoError(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBAutoAnalyzeRatio)
+	require.NoError(t, err)
+	require.Equal(t, "1.1", val)
+
+	// set to 0
+	err = mock.SetGlobalSysVar(ctx, TiDBAutoAnalyzeRatio, "0")
+	require.Error(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBAutoAnalyzeRatio)
+	require.NoError(t, err)
+	require.Equal(t, "1.1", val)
+
+	// set to 0.0000000001
+	err = mock.SetGlobalSysVar(ctx, TiDBAutoAnalyzeRatio, "0.0000000001")
+	require.Error(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBAutoAnalyzeRatio)
+	require.NoError(t, err)
+	require.Equal(t, "1.1", val)
+
+	// set to 0.00001
+	err = mock.SetGlobalSysVar(ctx, TiDBAutoAnalyzeRatio, "0.00001")
+	require.NoError(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBAutoAnalyzeRatio)
+	require.NoError(t, err)
+	require.Equal(t, "0.00001", val)
+
+	// set to 0.000009999
+	err = mock.SetGlobalSysVar(ctx, TiDBAutoAnalyzeRatio, "0.000009999")
+	require.Error(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBAutoAnalyzeRatio)
+	require.NoError(t, err)
+	require.Equal(t, "0.00001", val)
+}
+
 func TestTiDBTiFlashReplicaRead(t *testing.T) {
 	vars := NewSessionVars(nil)
 	mock := NewMockGlobalAccessor4Tests()
@@ -1549,4 +1604,70 @@ func TestTiDBLowResTSOUpdateInterval(t *testing.T) {
 	val, err = sv.Validate(vars, "1000", ScopeGlobal)
 	require.NoError(t, err)
 	require.Equal(t, "1000", val)
+}
+
+func TestSetEnableColumnTrackingAndPersistAnalyzeOptions(t *testing.T) {
+	vars := NewSessionVars(nil)
+	mock := NewMockGlobalAccessor4Tests()
+	mock.SessionVars = vars
+	vars.GlobalVarsAccessor = mock
+
+	// Test EnableColumnTracking
+	val, err := mock.GetGlobalSysVar(TiDBEnableColumnTracking)
+	require.NoError(t, err)
+	require.Equal(t, Off, val)
+	err = mock.SetGlobalSysVar(context.Background(), TiDBEnableColumnTracking, On)
+	require.NoError(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBEnableColumnTracking)
+	require.NoError(t, err)
+	require.Equal(t, On, val)
+	// Reset back.
+	err = mock.SetGlobalSysVar(context.Background(), TiDBEnableColumnTracking, Off)
+	require.NoError(t, err)
+
+	// Test PersistAnalyzeOptions
+	val, err = mock.GetGlobalSysVar(TiDBPersistAnalyzeOptions)
+	require.NoError(t, err)
+	require.Equal(t, On, val)
+	err = mock.SetGlobalSysVar(context.Background(), TiDBPersistAnalyzeOptions, Off)
+	require.NoError(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBPersistAnalyzeOptions)
+	require.NoError(t, err)
+	require.Equal(t, Off, val)
+	// Reset back
+	err = mock.SetGlobalSysVar(context.Background(), TiDBPersistAnalyzeOptions, On)
+	require.NoError(t, err)
+
+	// Set EnableColumnTracking to true when PersistAnalyzeOptions is false
+	// Set to false first.
+	err = mock.SetGlobalSysVar(context.Background(), TiDBEnableColumnTracking, Off)
+	require.NoError(t, err)
+	err = mock.SetGlobalSysVar(context.Background(), TiDBPersistAnalyzeOptions, Off)
+	require.NoError(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBPersistAnalyzeOptions)
+	require.NoError(t, err)
+	require.Equal(t, Off, val)
+	err = mock.SetGlobalSysVar(context.Background(), TiDBEnableColumnTracking, On)
+	require.Error(t, err, "enable column tracking requires to persist analyze options")
+	val, err = mock.GetGlobalSysVar(TiDBEnableColumnTracking)
+	require.NoError(t, err)
+	require.Equal(t, Off, val)
+
+	// Set PersistAnalyzeOptions to false when EnableColumnTracking is true
+	// Set to true first.
+	err = mock.SetGlobalSysVar(context.Background(), TiDBPersistAnalyzeOptions, On)
+	require.NoError(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBPersistAnalyzeOptions)
+	require.NoError(t, err)
+	require.Equal(t, On, val)
+	err = mock.SetGlobalSysVar(context.Background(), TiDBEnableColumnTracking, On)
+	require.NoError(t, err)
+	val, err = mock.GetGlobalSysVar(TiDBEnableColumnTracking)
+	require.NoError(t, err)
+	require.Equal(t, On, val)
+	err = mock.SetGlobalSysVar(context.Background(), TiDBPersistAnalyzeOptions, Off)
+	require.Error(t, err, "persist analyze options requires to enable column tracking")
+	val, err = mock.GetGlobalSysVar(TiDBPersistAnalyzeOptions)
+	require.NoError(t, err)
+	require.Equal(t, On, val)
 }

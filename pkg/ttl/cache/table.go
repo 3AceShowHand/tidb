@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/expression"
+	"github.com/pingcap/tidb/pkg/expression/contextstatic"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/model"
@@ -185,28 +187,89 @@ func (t *PhysicalTable) ValidateKeyPrefix(key []types.Datum) error {
 	return nil
 }
 
-// EvalExpireTime returns the expired time
-func (t *PhysicalTable) EvalExpireTime(ctx context.Context, se session.Session,
-	now time.Time) (expire time.Time, err error) {
-	tz := se.GetSessionVars().Location()
+var mockExpireTimeKey struct{}
 
-	expireExpr := t.TTLInfo.IntervalExprStr
-	unit := ast.TimeUnitType(t.TTLInfo.IntervalTimeUnit)
+// SetMockExpireTime can only used in test
+func SetMockExpireTime(ctx context.Context, tm time.Time) context.Context {
+	return context.WithValue(ctx, mockExpireTimeKey, tm)
+}
 
-	var rows []chunk.Row
-	rows, err = se.ExecuteSQL(
-		ctx,
-		// FROM_UNIXTIME does not support negative value, so we use `FROM_UNIXTIME(0) + INTERVAL <current_ts>`
-		// to present current time
-		fmt.Sprintf("SELECT FROM_UNIXTIME(0) + INTERVAL %d SECOND - INTERVAL %s %s", now.Unix(), expireExpr, unit.String()),
+// EvalExpireTime returns the expired time.
+func EvalExpireTime(now time.Time, interval string, unit ast.TimeUnitType) (time.Time, error) {
+	// Firstly, we should use the UTC time zone to compute the expired time to avoid time shift caused by DST.
+	// The start time should be a time with the same datetime string as `now` but it is in the UTC timezone.
+	// For example, if global timezone is `Asia/Shanghai` with a string format `2020-01-01 08:00:00 +0800`.
+	// The startTime should be in timezone `UTC` and have a string format `2020-01-01 08:00:00 +0000` which is not the
+	// same as the original one (`2020-01-01 00:00:00 +0000` in UTC actually).
+	start := time.Date(
+		now.Year(), now.Month(), now.Day(),
+		now.Hour(), now.Minute(), now.Second(),
+		now.Nanosecond(), time.UTC,
 	)
 
+	exprCtx := contextstatic.NewStaticExprContext()
+	// we need to set the location to UTC to make sure the time is in the same timezone as the start time.
+	intest.Assert(exprCtx.GetEvalCtx().Location() == time.UTC)
+	expr, err := expression.ParseSimpleExpr(
+		exprCtx,
+		fmt.Sprintf("FROM_UNIXTIME(0) + INTERVAL %d MICROSECOND - INTERVAL %s %s",
+			start.UnixMicro(), interval, unit.String(),
+		),
+	)
 	if err != nil {
-		return
+		return time.Time{}, err
 	}
 
-	tm := rows[0].GetTime(0)
-	return tm.CoreTime().GoTime(tz)
+	tm, _, err := expr.EvalTime(exprCtx.GetEvalCtx(), chunk.Row{})
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	end, err := tm.GoTime(time.UTC)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// Then we should add the duration between the time get from the previous SQL and the start time to the now time.
+	expiredTime := now.
+		Add(end.Sub(start)).
+		// Truncate to second to make sure the precision is always the same with the one stored in a table to avoid some
+		// comparing problems in testing.
+		Truncate(time.Second)
+
+	return expiredTime, nil
+}
+
+// EvalExpireTime returns the expired time for the current time.
+// It uses the global timezone in session to evaluation the context
+// and the return time is in the same timezone of now argument.
+func (t *PhysicalTable) EvalExpireTime(ctx context.Context, se session.Session,
+	now time.Time) (time.Time, error) {
+	if intest.InTest {
+		if tm, ok := ctx.Value(mockExpireTimeKey).(time.Time); ok {
+			return tm, nil
+		}
+	}
+
+	// Use the global time zone to compute expire time.
+	// Different timezones may have different results event with the same "now" time and TTL expression.
+	// Consider a TTL setting with the expiration `INTERVAL 1 MONTH`.
+	// If the current timezone is `Asia/Shanghai` and now is `2021-03-01 00:00:00 +0800`
+	// the expired time should be `2021-02-01 00:00:00 +0800`, corresponding to UTC time `2021-01-31 16:00:00 UTC`.
+	// But if we use the `UTC` time zone, the current time is `2021-02-28 16:00:00 UTC`,
+	// and the expired time should be `2021-01-28 16:00:00 UTC` that is not the same the previous one.
+	globalTz, err := se.GlobalTimeZone(ctx)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	start := now.In(globalTz)
+	expire, err := EvalExpireTime(start, t.TTLInfo.IntervalExprStr, ast.TimeUnitType(t.TTLInfo.IntervalTimeUnit))
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return expire.In(now.Location()), nil
 }
 
 // SplitScanRanges split ranges for TTL scan
