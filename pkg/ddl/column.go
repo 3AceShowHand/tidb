@@ -1400,17 +1400,9 @@ func (w *updateColumnWorker) getRowRecord(handle kv.Handle, recordKey []byte, ra
 		newColumnIDs = append(newColumnIDs, colID)
 		newRow = append(newRow, val)
 	}
-<<<<<<< HEAD
 	sctx, rd := w.sessCtx.GetSessionVars().StmtCtx, &w.sessCtx.GetSessionVars().RowEncoder
 	newRowVal, err := tablecodec.EncodeRow(sctx.TimeZone(), newRow, newColumnIDs, nil, nil, recordKey, rd)
 	err = sctx.HandleError(err)
-=======
-	checksums := w.calcChecksums()
-	rd := &w.tblCtx.GetSessionVars().RowEncoder
-	ec := w.exprCtx.GetEvalCtx().ErrCtx()
-	newRowVal, err := tablecodec.EncodeRow(w.loc, newRow, newColumnIDs, nil, nil, rd, checksums...)
-	err = ec.HandleError(err)
->>>>>>> master
 	if err != nil {
 		return errors.Trace(err)
 	}

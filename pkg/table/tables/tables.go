@@ -538,25 +538,6 @@ func (t *TableCommon) UpdateRecord(ctx context.Context, sctx table.MutateContext
 				oldData = append(oldData, value)
 				touched = append(touched, touched[col.DependencyColumnOffset])
 			}
-<<<<<<< HEAD
-=======
-			if needChecksum {
-				if col.ChangeStateInfo != nil {
-					// TODO: Check overflow or ignoreTruncate.
-					v, err := table.CastColumnValue(sctx.GetExprCtx(), newData[col.DependencyColumnOffset], col.ColumnInfo, false, false)
-					if err != nil {
-						return err
-					}
-					checksumData = t.appendInChangeColForChecksum(sctx, h, checksumData, col.ToInfo(), &newData[col.DependencyColumnOffset], &v)
-				} else {
-					v, err := table.GetColOriginDefaultValue(sctx.GetExprCtx(), col.ToInfo())
-					if err != nil {
-						return err
-					}
-					checksumData = t.appendNonPublicColForChecksum(sctx, h, checksumData, col.ToInfo(), &v)
-				}
-			}
->>>>>>> master
 			continue
 		}
 		if col.State != model.StatePublic {
@@ -974,25 +955,6 @@ func (t *TableCommon) AddRecord(sctx table.MutateContext, r []types.Datum, opts 
 	for _, col := range t.Columns {
 		var value types.Datum
 		if col.State == model.StateDeleteOnly || col.State == model.StateDeleteReorganization {
-<<<<<<< HEAD
-=======
-			if needChecksum {
-				if col.ChangeStateInfo != nil {
-					// TODO: Check overflow or ignoreTruncate.
-					v, err := table.CastColumnValue(sctx.GetExprCtx(), r[col.DependencyColumnOffset], col.ColumnInfo, false, false)
-					if err != nil {
-						return nil, err
-					}
-					checksumData = t.appendInChangeColForChecksum(sctx, recordID, checksumData, col.ToInfo(), &r[col.DependencyColumnOffset], &v)
-				} else {
-					v, err := table.GetColOriginDefaultValue(sctx.GetExprCtx(), col.ToInfo())
-					if err != nil {
-						return nil, err
-					}
-					checksumData = t.appendNonPublicColForChecksum(sctx, recordID, checksumData, col.ToInfo(), &v)
-				}
-			}
->>>>>>> master
 			continue
 		}
 		// In column type change, since we have set the origin default value for changing col, but
