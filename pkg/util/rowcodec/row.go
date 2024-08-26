@@ -310,7 +310,7 @@ func (r *row) CalculateRawChecksum(
 	r.checksumHeader &^= checksumMaskVersion // revert checksum version
 	r.checksumHeader |= checksumVersionRaw   // set checksum version
 	for idx, colID := range colIDs {
-		data, err := encodeValueDatum(loc, values[idx], nil)
+		data, err := encodeValueDatum(loc, values[idx], buf)
 		if err != nil {
 			return 0, err
 		}
@@ -321,6 +321,7 @@ func (r *row) CalculateRawChecksum(
 			start, end := r.getOffsets(index)
 			copy(r.data[start:end], data)
 		}
+		buf = buf[:0]
 	}
 	buf = r.toBytes(buf)
 	buf = append(buf, r.checksumHeader)
